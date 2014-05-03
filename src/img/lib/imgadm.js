@@ -1503,9 +1503,6 @@ IMGADM.prototype._installImage = function _installImage(options, callback) {
     var dsName = format('%s/%s', options.zpool, uuid);
     var partialDsName;  // set when the 'zfs receive' begins
     var bar = null;  // progress-bar object
-    var md5Hash = null;
-    var sha1Hash = null;
-    var md5Expected = null;
     var lockPath = self._lockPathFromUuid(uuid);
     var unlock;
     var doTheImport;  // determined after getting the import lock
@@ -1649,17 +1646,9 @@ IMGADM.prototype._installImage = function _installImage(options, callback) {
                         next(err);
                         return;
                     }
-                    if (imageInfo.source.type !== 'dsapi'
-                        && !stream.headers['content-md5'])
-                    {
-                        next(new errors.DownloadError('image file headers '
-                            + 'did not include a "Content-MD5"'));
-                        return;
-                    }
                     fileInfo = {
                         stream: stream,
-                        size: Number(stream.headers['content-length']),
-                        contentMd5: stream.headers['content-md5']
+                        size: Number(stream.headers['content-length'])
                     };
                     next();
                 });
@@ -1709,14 +1698,9 @@ IMGADM.prototype._installImage = function _installImage(options, callback) {
             }
 
             // [A]
-            md5Expected = fileInfo.contentMd5;
-            md5Hash = crypto.createHash('md5');
-            sha1Hash = crypto.createHash('sha1');
             fileInfo.stream.on('data', function (chunk) {
                 if (bar)
                     bar.advance(chunk.length);
-                md5Hash.update(chunk);
-                sha1Hash.update(chunk);
             });
             fileInfo.stream.on('error', finish);
 
@@ -1792,39 +1776,6 @@ IMGADM.prototype._installImage = function _installImage(options, callback) {
                 fileInfo.stream.pipe(zfsRecv.stdin);
             }
             fileInfo.stream.resume();
-        },
-
-        /**
-         * Ensure the streamed image data matches expected checksums.
-         */
-        function checksum(next) {
-            if (!doTheImport) {
-                next();
-                return;
-            }
-
-            var err;
-
-            // We have a content-md5 from the headers if the is was streamed
-            // from an IMGAPI.
-            if (md5Expected) {
-                var md5Actual = md5Hash.digest('base64');
-                if (md5Actual !== md5Expected) {
-                    err = new errors.DownloadError(format(
-                        'Content-MD5 expected to be %s, but was %s',
-                        md5Expected, md5Actual));
-                }
-            }
-
-            var sha1Expected = manifest.files[0].sha1;
-            var sha1Actual = sha1Hash.digest('hex');
-            if (sha1Expected && sha1Actual !== sha1Expected) {
-                err = new errors.DownloadError(format(
-                    'image file sha1 expected to be %s, but was %s',
-                    sha1Expected, sha1Actual));
-            }
-
-            next(err);
         },
 
         /**
