@@ -1648,7 +1648,8 @@ IMGADM.prototype._installImage = function _installImage(options, callback) {
                     }
                     fileInfo = {
                         stream: stream,
-                        size: Number(stream.headers['content-length'])
+                        size: Number(stream.headers['content-length']),
+                        approximateSize: imageInfo.manifest.files[0].approximateSize
                     };
                     next();
                 });
@@ -1692,7 +1693,7 @@ IMGADM.prototype._installImage = function _installImage(options, callback) {
 
             if (!options.quiet && process.stderr.isTTY) {
                 bar = new ProgressBar({
-                    size: fileInfo.size,
+                    size: fileInfo.size || fileInfo.approximateSize,
                     filename: uuid
                 });
             }
